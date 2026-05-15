@@ -3,14 +3,11 @@
 import { useState } from "react";
 import { PQ_TOPICS, PQ_QUESTIONS } from "@/lib/data";
 import { TopicDot, QuestionRow, QuestionCard } from "./shared";
+import type { DbExam } from "@/lib/types";
 
 const YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
-const EXAMS = [
-  { id: "UPSC Pre",  count: 547 },
-  { id: "CGPSC Pre", count: 412 },
-];
 
-export function LibraryView() {
+export function LibraryView({ exams }: { exams: DbExam[] }) {
   const [activeTopic, setActiveTopic] = useState("all");
   const [activeYear, setActiveYear] = useState<number | null>(null);
   const [openQ, setOpenQ] = useState<string | null>(null);
@@ -91,16 +88,15 @@ export function LibraryView() {
           ))}
         </div>
 
-        {/* Exam filter */}
+        {/* Exam filter — live from Supabase */}
         <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: "uppercase", color: "var(--muted)", padding: "0 8px", margin: "24px 0 8px" }}>
           Exam
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {EXAMS.map((e) => (
+          {exams.map((e) => (
             <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" defaultChecked style={{ accentColor: "var(--ink)" }} />
-              <span style={{ flex: 1 }}>{e.id}</span>
-              <span className="num" style={{ fontSize: 11, color: "var(--muted)" }}>{e.count}</span>
+              <span style={{ flex: 1 }}>{e.name}</span>
             </label>
           ))}
         </div>

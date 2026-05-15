@@ -1,35 +1,28 @@
-"use client";
+import { PrepyqApp } from "@/components/PrepyqApp";
+import type { DbExam } from "@/lib/types";
 
-import { useState } from "react";
-import { TopNav, type Tab } from "@/components/TopNav";
-import { LibraryView } from "@/components/LibraryView";
-import { UploadView } from "@/components/UploadView";
-import { ExamPaperView } from "@/components/ExamPaperView";
-import { PracticeView } from "@/components/PracticeView";
+const FALLBACK_EXAMS: DbExam[] = [
+  { id: "fallback-1", name: "UPSC Prelims",  slug: "upsc-prelims",  created_at: "" },
+  { id: "fallback-2", name: "CGPSC Prelims", slug: "cgpsc-prelims", created_at: "" },
+];
 
-export default function Home() {
-  const [activeTab, setActiveTab] = useState<Tab>("library");
+async function fetchExams(): Promise<DbExam[]> {
+  // Guard: if env vars aren't filled in yet, skip the DB call entirely
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  if (!url.startsWith("http")) return FALLBACK_EXAMS;
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        background: "var(--paper)",
-        fontFamily: "var(--font-sans)",
-        color: "var(--ink)",
-        WebkitFontSmoothing: "antialiased",
-        letterSpacing: "-0.005em",
-        fontFeatureSettings: '"ss01", "cv11"',
-      } as React.CSSProperties}
-    >
-      <TopNav active={activeTab} onTabChange={setActiveTab} />
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("exams").select("*").order("name");
+    if (error || !data?.length) return FALLBACK_EXAMS;
+    return data;
+  } catch {
+    return FALLBACK_EXAMS;
+  }
+}
 
-      {activeTab === "library"  && <LibraryView />}
-      {activeTab === "upload"   && <UploadView />}
-      {activeTab === "papers"   && <ExamPaperView />}
-      {activeTab === "practice" && <PracticeView />}
-    </div>
-  );
+export default async function Home() {
+  const exams = await fetchExams();
+  return <PrepyqApp exams={exams} />;
 }
