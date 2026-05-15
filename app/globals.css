@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f5f2eb;
+  --bg-2: #efeadf;
+  --paper: #faf8f2;
+  --surface: #ffffff;
+  --ink: #1c1a17;
+  --ink-2: #3a352d;
+  --muted: #847e70;
+  --muted-2: #b6afa0;
+  --line: #e6e0d2;
+  --line-2: #f0ebde;
+  --primary: #1a2841;
+  --primary-2: #2c3e63;
+  --accent: oklch(0.72 0.13 70);
+  --accent-fg: #4a3413;
+  --accent-soft: oklch(0.95 0.05 85);
+  --good: oklch(0.58 0.13 145);
+  --good-soft: oklch(0.95 0.05 145);
+  --bad: oklch(0.6 0.16 25);
+  --bad-soft: oklch(0.95 0.04 25);
+  --highlight: oklch(0.96 0.04 85);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+
+  --shadow-sm: 0 1px 2px rgba(28,26,23,0.04), 0 1px 1px rgba(28,26,23,0.03);
+  --shadow-md: 0 4px 14px rgba(28,26,23,0.06), 0 1px 3px rgba(28,26,23,0.04);
+  --shadow-lg: 0 18px 40px rgba(28,26,23,0.1), 0 4px 10px rgba(28,26,23,0.05);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Base reset for app content */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Shared component classes */
+.pq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.pq-chip.year {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  padding: 0 7px 0 8px;
+}
+.pq-chip.exam {
+  background: var(--primary);
+  color: #f3ede0;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.pq-chip.topic {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.pq-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .05s;
+  font-family: inherit;
 }
+.pq-btn:hover { background: var(--bg-2); border-color: var(--muted-2); }
+.pq-btn:active { transform: translateY(0.5px); }
+.pq-btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.pq-btn.primary:hover { background: var(--primary); border-color: var(--primary); }
+.pq-btn.ghost { background: transparent; border-color: transparent; }
+.pq-btn.ghost:hover { background: var(--bg-2); }
+
+.pq-opt {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: left;
+  transition: background .12s, border-color .12s, transform .05s;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+}
+.pq-opt:hover:not(.locked) { background: var(--bg-2); border-color: var(--muted-2); }
+.pq-opt.correct { background: var(--good-soft); border-color: color-mix(in oklch, var(--good) 40%, var(--line)); }
+.pq-opt.correct .opt-key { background: var(--good); color: #fff; }
+.pq-opt.wrong { background: var(--bad-soft); border-color: color-mix(in oklch, var(--bad) 40%, var(--line)); }
+.pq-opt.wrong .opt-key { background: var(--bad); color: #fff; }
+.pq-opt.dim { opacity: 0.55; }
+
+.opt-key {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+}
+
+.pq-bar { width: 100%; height: 4px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
+.pq-bar > span { display: block; height: 100%; background: var(--ink); border-radius: 4px; transition: width .4s ease; }
+
+.tdot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+
+.scroll-y { overflow-y: auto; }
+.scroll-y::-webkit-scrollbar { width: 6px; }
+.scroll-y::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+
+.serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; }
+.mono { font-family: var(--font-mono); }
+.num { font-variant-numeric: tabular-nums; }
