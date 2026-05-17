@@ -1,202 +1,205 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PQ_RECENT } from "@/lib/data";
+import { useRef, useState } from "react";
 
-interface UploadState {
-  kind: "bank" | "paper";
-  progress: number;
-  name: string;
-}
+type UploadStatus = "idle" | "uploading" | "done" | "error";
 
-function UploadCard({
-  tag,
-  title,
-  desc,
-  icon,
-  dragging,
-  setDragging,
-  onUpload,
-  uploading,
-}: {
-  kind?: "bank" | "paper";
-  tag: string;
-  title: string;
-  desc: string;
-  icon: React.ReactNode;
-  dragging: boolean;
-  setDragging: (v: boolean) => void;
-  onUpload: () => void;
-  uploading: UploadState | null;
-}) {
-  const isDone = (uploading?.progress ?? 0) >= 100;
-
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); onUpload(); }}
-      onClick={() => !uploading && onUpload()}
-      style={{
-        position: "relative",
-        background: dragging ? "var(--accent-soft)" : "var(--surface)",
-        border: `1.5px ${dragging ? "solid" : "dashed"} ${dragging ? "var(--accent)" : "var(--muted-2)"}`,
-        borderRadius: 16,
-        padding: "32px 28px",
-        cursor: uploading ? "default" : "pointer",
-        transition: "background .15s, border-color .15s",
-        minHeight: 240,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-        <div style={{ color: "var(--ink-2)" }}>{icon}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.08, textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
-            {tag}
-          </div>
-          <h3 style={{ fontSize: 19, fontWeight: 600, margin: 0, marginBottom: 8, letterSpacing: -0.3 }}>{title}</h3>
-          <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>{desc}</p>
-        </div>
-      </div>
-
-      {!uploading && (
-        <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 10 }}>
-          <button className="pq-btn primary" style={{ height: 34, fontSize: 13 }}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="M6.5 9V2M3 5.5l3.5-3.5 3.5 3.5M2 11h9" />
-            </svg>
-            Choose file
-          </button>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>or drop a PDF anywhere here</span>
-        </div>
-      )}
-
-      {uploading && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <path d="M3 1h6l3 3v9H3z" />
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{uploading.name}</div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                {isDone ? (
-                  <><span style={{ color: "var(--good)" }}>✓ Done</span> · 87 questions extracted · 8 topics</>
-                ) : uploading.progress < 30 ? "Reading PDF…" : uploading.progress < 65 ? "Detecting questions…" : "Categorizing by topic…"}
-              </div>
-            </div>
-            <span className="num" style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
-              {Math.round(uploading.progress)}%
-            </span>
-          </div>
-          <div className="pq-bar">
-            <span style={{ width: uploading.progress + "%" }} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+const STAGES = [
+  { delay: 1500, pct: 20, label: "Claude is reading the PDF…" },
+  { delay: 6000, pct: 50, label: "Identifying questions…" },
+  { delay: 14000, pct: 75, label: "Categorising by topic…" },
+  { delay: 22000, pct: 90, label: "Saving to your library…" },
+];
 
 export function UploadView() {
-  const [dragging, setDragging] = useState<"bank" | "paper" | null>(null);
-  const [uploading, setUploading] = useState<UploadState | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<UploadStatus>("idle");
+  const [fileName, setFileName] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [stageLabel, setStageLabel] = useState("");
+  const [resultMsg, setResultMsg] = useState("");
+  const [dragging, setDragging] = useState(false);
 
-  const startUpload = (kind: "bank" | "paper") => {
-    setUploading({
-      kind,
-      progress: 0,
-      name: kind === "bank" ? "UPSC_PYQ_Bank_2015-23.pdf" : "CGPSC_Pre_2024.pdf",
-    });
+  const reset = () => {
+    setStatus("idle");
+    setProgress(0);
+    setStageLabel("");
+    setResultMsg("");
+    setFileName("");
+    setDragging(false);
+    if (fileRef.current) fileRef.current.value = "";
   };
 
-  useEffect(() => {
-    if (!uploading || uploading.progress >= 100) return;
-    const t = setTimeout(
-      () => setUploading((u) => u ? { ...u, progress: Math.min(100, u.progress + 7 + Math.random() * 8) } : null),
-      220
+  const doUpload = async (file: File) => {
+    if (file.type !== "application/pdf") {
+      setStatus("error");
+      setResultMsg("Please drop a PDF file.");
+      return;
+    }
+
+    setFileName(file.name);
+    setStatus("uploading");
+    setProgress(8);
+    setStageLabel("Uploading PDF…");
+
+    const timers = STAGES.map(({ delay, pct, label }) =>
+      setTimeout(() => { setProgress(pct); setStageLabel(label); }, delay)
     );
-    return () => clearTimeout(t);
-  }, [uploading]);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      timers.forEach(clearTimeout);
+
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus("error");
+        setResultMsg(data.error ?? "Something went wrong.");
+      } else {
+        setProgress(100);
+        setStatus("done");
+        setResultMsg(
+          `${data.saved} questions extracted and sorted by topic. Go to Supabase → questions table → set status = 'approved' to make them live on the site.`
+        );
+      }
+    } catch {
+      timers.forEach(clearTimeout);
+      setStatus("error");
+      setResultMsg("Network error — please try again.");
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) doUpload(f);
+  };
 
   return (
     <div className="scroll-y" style={{ flex: 1, padding: "48px 64px", background: "var(--bg)" }}>
-      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
-        {/* Heading */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 36, fontWeight: 600, letterSpacing: -0.7, margin: 0, marginBottom: 8 }}>
-            Drop a PDF,{" "}
-            <span className="serif" style={{ color: "var(--accent-fg)" }}>get a syllabus</span>.
-          </h1>
-          <p style={{ fontSize: 15, color: "var(--muted)", margin: 0, maxWidth: 620, lineHeight: 1.55 }}>
-            Upload PYQ banks or full exam papers — Prepyq extracts each question, tags it with year, exam and topic, and files it next to the rest of your library.
-          </p>
-        </div>
+      <div style={{ maxWidth: 680, margin: "0 auto" }}>
 
-        {/* Two-flow split */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 36 }}>
-          <UploadCard
-            kind="bank"
-            tag="Question bank"
-            title="Mixed PYQ collection"
-            desc="A PDF with questions from many exams or years. We'll split it apart and categorize each one."
-            icon={
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <rect x="6" y="4" width="20" height="24" rx="2" />
-                <path d="M11 10h10M11 15h10M11 20h7" />
-              </svg>
-            }
-            dragging={dragging === "bank"}
-            setDragging={(b) => setDragging(b ? "bank" : null)}
-            onUpload={() => startUpload("bank")}
-            uploading={uploading?.kind === "bank" ? uploading : null}
-          />
-          <UploadCard
-            kind="paper"
-            tag="Single exam paper"
-            title="One full question paper"
-            desc="A specific year's pre paper — we'll keep the order, tag each question, and show you the topic distribution."
-            icon={
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <path d="M8 4h12l4 4v20H8z" />
-                <path d="M20 4v4h4" />
-                <path d="M12 14h8M12 18h8M12 22h5" />
-              </svg>
-            }
-            dragging={dragging === "paper"}
-            setDragging={(b) => setDragging(b ? "paper" : null)}
-            onUpload={() => startUpload("paper")}
-            uploading={uploading?.kind === "paper" ? uploading : null}
-          />
-        </div>
+        <h1 style={{ fontSize: 36, fontWeight: 600, letterSpacing: -0.7, margin: "0 0 10px" }}>
+          Drop a PDF,{" "}
+          <span className="serif" style={{ color: "var(--accent-fg)" }}>get a syllabus</span>.
+        </h1>
+        <p style={{ fontSize: 15, color: "var(--muted)", margin: "0 0 36px", lineHeight: 1.6, maxWidth: 540 }}>
+          Upload any question bank or exam paper. Claude reads every question, figures out the topic — Polity, History, Geography and so on — and files it automatically.
+        </p>
 
-        {/* Recently processed */}
-        <div style={{ marginBottom: 12, display: "flex", alignItems: "baseline", gap: 10 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.06, textTransform: "uppercase", color: "var(--muted)", margin: 0 }}>
-            Recently processed
-          </h3>
-          <span style={{ flex: 1, height: 1, background: "var(--line)", marginLeft: 4 }} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {PQ_RECENT.map((r, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4">
-                  <path d="M4 2h7l3 3v11H4z" />
-                  <path d="M11 2v3h3" />
+        {/* Drop zone */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => status !== "uploading" && fileRef.current?.click()}
+          style={{
+            background: dragging ? "var(--accent-soft)" : "var(--surface)",
+            border: `1.5px ${dragging ? "solid" : "dashed"} ${dragging ? "var(--accent)" : "var(--muted-2)"}`,
+            borderRadius: 18,
+            padding: "52px 32px",
+            textAlign: "center",
+            cursor: status === "uploading" ? "default" : "pointer",
+            transition: "background .15s, border-color .15s",
+            marginBottom: 32,
+          }}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) doUpload(f); }}
+          />
+
+          {status === "idle" && (
+            <>
+              <div style={{ color: "var(--muted-2)", marginBottom: 22 }}>
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <path d="M13 9h17l10 10v24H13z" />
+                  <path d="M30 9v10h10" />
+                  <path d="M24 37V25M19 30l5-5 5 5" />
                 </svg>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.name}</div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
-                  {r.kind === "bank" ? "Question bank" : "Single paper"} · <span className="num">{r.questions}</span> questions extracted · {r.when}
+              <button className="pq-btn primary" style={{ marginBottom: 14, height: 40, fontSize: 14 }}>
+                Choose PDF file
+              </button>
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>or drag and drop anywhere here</p>
+              <p style={{ fontSize: 12, color: "var(--muted-2)", margin: "10px 0 0" }}>
+                Works with full question banks and single exam papers
+              </p>
+            </>
+          )}
+
+          {status === "uploading" && (
+            <>
+              <p style={{ fontSize: 13.5, fontWeight: 500, color: "var(--ink-2)", marginBottom: 24 }}>
+                {fileName}
+              </p>
+              <div style={{ maxWidth: 360, margin: "0 auto 14px" }}>
+                <div className="pq-bar" style={{ height: 6 }}>
+                  <span style={{ width: progress + "%", transition: "width .8s ease" }} />
                 </div>
               </div>
-              <button className="pq-btn ghost" style={{ height: 28, fontSize: 12 }}>Open →</button>
-            </div>
-          ))}
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{stageLabel}</p>
+            </>
+          )}
+
+          {status === "done" && (
+            <>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: "var(--good-soft)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", color: "var(--good)", fontSize: 22 }}>
+                ✓
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)", marginBottom: 10 }}>Done!</p>
+              <p style={{ fontSize: 13.5, color: "var(--ink-2)", margin: "0 auto 24px", maxWidth: 440, lineHeight: 1.65 }}>
+                {resultMsg}
+              </p>
+              <button className="pq-btn" onClick={(e) => { e.stopPropagation(); reset(); }}>
+                Upload another
+              </button>
+            </>
+          )}
+
+          {status === "error" && (
+            <>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: "var(--bad-soft)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", color: "var(--bad)", fontSize: 22 }}>
+                ✕
+              </div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "var(--bad)", marginBottom: 10 }}>Upload failed</p>
+              <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "0 auto 24px", maxWidth: 400, lineHeight: 1.6 }}>
+                {resultMsg}
+              </p>
+              <button className="pq-btn" onClick={(e) => { e.stopPropagation(); reset(); }}>
+                Try again
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* How it works */}
+        <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 14, padding: "22px 26px" }}>
+          <h3 style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.07, textTransform: "uppercase", color: "var(--muted)", margin: "0 0 16px" }}>
+            How it works
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {[
+              ["📄", "Any PDF", "Question bank or single exam paper — both work"],
+              ["🤖", "Claude reads it", "Finds every MCQ question automatically"],
+              ["🏷️", "Auto-categorised", "Polity → Polity, History → History, and so on"],
+              ["✅", "You approve", "Review in Supabase, then set status = approved to go live"],
+            ].map(([icon, title, desc]) => (
+              <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", color: "var(--ink)" }}>{title}</p>
+                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

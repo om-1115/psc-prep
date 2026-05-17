@@ -1,17 +1,24 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Logo } from "./shared";
 
-export type Tab = "library" | "practice" | "papers" | "upload";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "library",  label: "Library" },
-  { id: "practice", label: "Practice" },
-  { id: "papers",   label: "Exam Papers" },
-  { id: "upload",   label: "Upload" },
+const NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Library",     href: "/" },
+  { label: "Practice",    href: "/practice" },
+  { label: "Exam Papers", href: "/exams" },
+  { label: "Upload",      href: "/upload" },
 ];
 
-export function TopNav({ active, onTabChange }: { active: Tab; onTabChange: (t: Tab) => void }) {
+export function TopNav() {
+  const pathname = usePathname();
+
+  function isActive(href: string) {
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  }
+
   return (
     <div
       style={{
@@ -25,28 +32,32 @@ export function TopNav({ active, onTabChange }: { active: Tab; onTabChange: (t: 
         flexShrink: 0,
       }}
     >
-      <Logo size={22} />
+      <Link href="/" style={{ textDecoration: "none", color: "inherit" }}>
+        <Logo size={22} />
+      </Link>
 
       <nav style={{ display: "flex", gap: 4, marginLeft: 20 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => onTabChange(t.id)}
+        {NAV_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
             style={{
               padding: "7px 12px",
               fontSize: 13.5,
-              fontWeight: active === t.id ? 600 : 400,
-              color: active === t.id ? "var(--ink)" : "var(--muted)",
+              fontWeight: isActive(link.href) ? 600 : 400,
+              color: isActive(link.href) ? "var(--ink)" : "var(--muted)",
               borderRadius: 8,
               cursor: "pointer",
-              background: active === t.id ? "var(--bg-2)" : "transparent",
+              background: isActive(link.href) ? "var(--bg-2)" : "transparent",
               border: "none",
               fontFamily: "inherit",
               transition: "background .12s, color .12s",
+              textDecoration: "none",
+              display: "inline-block",
             }}
           >
-            {t.label}
-          </button>
+            {link.label}
+          </Link>
         ))}
       </nav>
 

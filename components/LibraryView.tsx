@@ -1,79 +1,261 @@
 "use client";
 
-import { useState } from "react";
-import { PQ_TOPICS, PQ_QUESTIONS } from "@/lib/data";
-import { TopicDot, QuestionRow, QuestionCard } from "./shared";
-import type { DbExam } from "@/lib/types";
+import { useState, useMemo } from "react";
+import { DbQuestionCard } from "@/components/PaperDetailClient";
 
-const YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
+export interface LibraryQuestion {
+  id: string;
+  question_text: string;
+  difficulty: "easy" | "medium" | "hard";
+  correct_option_id: string | null;
+  explanation: string | null;
+  topic_id: string;
+  options: { id: string; option_key: string; option_text: string }[];
+  topics: {
+    id: string;
+    name: string;
+    subjects: { id: string; name: string; color: string };
+  } | null;
+  papers: { year: number; exams: { name: string } | null } | null;
+}
 
-export function LibraryView({ exams }: { exams: DbExam[] }) {
-  const [activeTopic, setActiveTopic] = useState("all");
-  const [activeYear, setActiveYear] = useState<number | null>(null);
-  const [openQ, setOpenQ] = useState<string | null>(null);
+function LibraryQuestionRow({
+  question,
+  onOpen,
+}: {
+  question: LibraryQuestion;
+  onOpen: () => void;
+}) {
+  const year = question.papers?.year;
+  const examName = question.papers?.exams?.name ?? "";
+  const subjectName = question.topics?.subjects?.name ?? "";
+  const topicName = question.topics?.name ?? "";
+  const subjectColor = question.topics?.subjects?.color ?? "#999";
 
-  const filtered = PQ_QUESTIONS.filter(
-    (q) =>
-      (activeTopic === "all" || q.topic === activeTopic) &&
-      (!activeYear || q.year === activeYear)
+  return (
+    <button
+      onClick={onOpen}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "14px 16px",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        color: "var(--ink)",
+        transition: "border-color .12s",
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--muted-2)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--line)"; }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {year && (
+          <span className="pq-chip year">
+            &apos;{String(year).slice(-2)}
+          </span>
+        )}
+        {examName && <span className="pq-chip exam">{examName}</span>}
+        {subjectName && (
+          <span className="pq-chip" style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--ink-2)" }}>
+            <span className="tdot" style={{ background: subjectColor, width: 7, height: 7 }} />
+            {subjectName}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        <span
+          className="pq-chip"
+          style={{
+            background: "transparent",
+            padding: "0 4px",
+            color:
+              question.difficulty === "easy"
+                ? "var(--good)"
+                : question.difficulty === "hard"
+                ? "var(--bad)"
+                : "var(--accent-fg)",
+          }}
+        >
+          {question.difficulty.charAt(0).toUpperCase() + question.difficulty.slice(1)}
+        </span>
+      </div>
+
+      <div
+        style={{
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: "var(--ink)",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        } as React.CSSProperties}
+      >
+        {question.question_text.split("\n")[0]}
+      </div>
+
+      {topicName && (
+        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{topicName}</div>
+      )}
+    </button>
   );
+}
 
-  const activeTopicName = PQ_TOPICS.find((t) => t.id === activeTopic)?.name;
+export function LibraryView({ questions: allQuestions }: { questions: LibraryQuestion[] }) {
+  const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
+  const [activeYear, setActiveYear] = useState<number | null>(null);
+  const [openQId, setOpenQId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  const subjects = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; color: string; count: number }>();
+    for (const q of allQuestions) {
+      const s = q.topics?.subjects;
+      if (!s) continue;
+      const entry = map.get(s.id) ?? { id: s.id, name: s.name, color: s.color, count: 0 };
+      entry.count++;
+      map.set(s.id, entry);
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [allQuestions]);
+
+  const years = useMemo(() => {
+    const set = new Set<number>();
+    for (const q of allQuestions) {
+      if (q.papers?.year) set.add(q.papers.year);
+    }
+    return Array.from(set).sort((a, b) => b - a);
+  }, [allQuestions]);
+
+  const filtered = useMemo(() => {
+    return allQuestions.filter((q) => {
+      if (activeSubjectId && q.topics?.subjects?.id !== activeSubjectId) return false;
+      if (activeYear && q.papers?.year !== activeYear) return false;
+      return true;
+    });
+  }, [allQuestions, activeSubjectId, activeYear]);
+
+  const activeSubjectName = subjects.find((s) => s.id === activeSubjectId)?.name;
+  const openQuestion = openQId ? allQuestions.find((q) => q.id === openQId) : null;
+
+  const handleSubjectChange = (id: string | null) => {
+    setActiveSubjectId(id);
+    setVisibleCount(20);
+    setOpenQId(null);
+  };
+
+  const handleYearChange = (y: number) => {
+    setActiveYear(activeYear === y ? null : y);
+    setVisibleCount(20);
+    setOpenQId(null);
+  };
 
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
       {/* Sidebar */}
       <aside
         className="scroll-y"
-        style={{ width: 264, borderRight: "1px solid var(--line)", background: "var(--paper)", padding: "20px 16px", overflowY: "auto" }}
+        style={{
+          width: 264,
+          borderRight: "1px solid var(--line)",
+          background: "var(--paper)",
+          padding: "20px 16px",
+          flexShrink: 0,
+        }}
       >
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: "uppercase", color: "var(--muted)", padding: "0 8px", marginBottom: 8 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 0.08,
+            textTransform: "uppercase",
+            color: "var(--muted)",
+            padding: "0 8px",
+            marginBottom: 8,
+          }}
+        >
           Topics
         </div>
 
         <button
-          onClick={() => setActiveTopic("all")}
+          onClick={() => handleSubjectChange(null)}
           style={{
-            width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8,
-            fontSize: 13.5, fontWeight: activeTopic === "all" ? 600 : 400,
-            background: activeTopic === "all" ? "var(--bg-2)" : "transparent",
-            display: "flex", alignItems: "center", gap: 10,
-            border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--ink)",
+            width: "100%",
+            textAlign: "left",
+            padding: "8px 10px",
+            borderRadius: 8,
+            fontSize: 13.5,
+            fontWeight: activeSubjectId === null ? 600 : 400,
+            background: activeSubjectId === null ? "var(--bg-2)" : "transparent",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            color: "var(--ink)",
           }}
         >
           <span style={{ flex: 1 }}>All topics</span>
-          <span className="num" style={{ fontSize: 11.5, color: "var(--muted)" }}>1,247</span>
+          <span className="num" style={{ fontSize: 11.5, color: "var(--muted)" }}>
+            {allQuestions.length.toLocaleString()}
+          </span>
         </button>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 4 }}>
-          {PQ_TOPICS.map((t) => (
+          {subjects.map((s) => (
             <button
-              key={t.id}
-              onClick={() => setActiveTopic(t.id)}
+              key={s.id}
+              onClick={() => handleSubjectChange(s.id)}
               style={{
-                width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8,
-                fontSize: 13.5, fontWeight: activeTopic === t.id ? 600 : 400,
-                background: activeTopic === t.id ? "var(--bg-2)" : "transparent",
-                display: "flex", alignItems: "center", gap: 10,
-                border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--ink)",
+                width: "100%",
+                textAlign: "left",
+                padding: "8px 10px",
+                borderRadius: 8,
+                fontSize: 13.5,
+                fontWeight: activeSubjectId === s.id ? 600 : 400,
+                background: activeSubjectId === s.id ? "var(--bg-2)" : "transparent",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                color: "var(--ink)",
               }}
             >
-              <span className="tdot" style={{ background: t.color }} />
-              <span style={{ flex: 1 }}>{t.name}</span>
-              <span className="num" style={{ fontSize: 11.5, color: "var(--muted)" }}>{t.count}</span>
+              <span className="tdot" style={{ background: s.color }} />
+              <span style={{ flex: 1 }}>{s.name}</span>
+              <span className="num" style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                {s.count}
+              </span>
             </button>
           ))}
         </div>
 
         {/* Year filter */}
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: "uppercase", color: "var(--muted)", padding: "0 8px", margin: "24px 0 8px" }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 0.08,
+            textTransform: "uppercase",
+            color: "var(--muted)",
+            padding: "0 8px",
+            margin: "24px 0 8px",
+          }}
+        >
           Year
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "0 6px" }}>
-          {YEARS.map((y) => (
+          {years.slice(0, 30).map((y) => (
             <button
               key={y}
-              onClick={() => setActiveYear(activeYear === y ? null : y)}
+              onClick={() => handleYearChange(y)}
               className="pq-chip year"
               style={{
                 background: activeYear === y ? "var(--ink)" : "var(--bg)",
@@ -87,99 +269,128 @@ export function LibraryView({ exams }: { exams: DbExam[] }) {
             </button>
           ))}
         </div>
-
-        {/* Exam filter — live from Supabase */}
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: "uppercase", color: "var(--muted)", padding: "0 8px", margin: "24px 0 8px" }}>
-          Exam
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {exams.map((e) => (
-            <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" defaultChecked style={{ accentColor: "var(--ink)" }} />
-              <span style={{ flex: 1 }}>{e.name}</span>
-            </label>
-          ))}
-        </div>
       </aside>
 
       {/* Main feed */}
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {/* Feed header */}
-        <div style={{ padding: "24px 32px 12px", borderBottom: "1px solid var(--line-2)", background: "var(--paper)" }}>
+        <div
+          style={{
+            padding: "24px 32px 12px",
+            borderBottom: "1px solid var(--line-2)",
+            background: "var(--paper)",
+            flexShrink: 0,
+          }}
+        >
           <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 14 }}>
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: -0.4 }}>
-                {activeTopic === "all" ? "All questions" : activeTopicName}
+              <h2
+                style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: -0.4 }}
+              >
+                {activeSubjectId ? activeSubjectName : "All questions"}
               </h2>
               <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>
-                <span className="num">{filtered.length === PQ_QUESTIONS.length ? "1,247" : filtered.length * 24}</span> questions{" "}
-                <span className="serif">across</span>{" "}
-                <span className="num">8</span> years
+                <span className="num">{filtered.length.toLocaleString()}</span>{" "}
+                <span className="serif">questions</span>
                 {activeYear && <> · filtered to <b>{activeYear}</b></>}
               </p>
             </div>
             <span style={{ flex: 1 }} />
-            <button className="pq-btn">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <path d="M2 3h9M3.5 6.5h6M5 10h3" />
-              </svg>
-              Sort: Most asked
-            </button>
-            <button className="pq-btn primary">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <path d="M6.5 2v9M2 6.5h9" />
-              </svg>
-              Practice mode
-            </button>
+            <button className="pq-btn primary">Practice mode</button>
           </div>
 
           {/* Active filter chips */}
           <div style={{ display: "flex", gap: 6, alignItems: "center", minHeight: 22 }}>
             <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Active:</span>
-            {activeTopic !== "all" && (
-              <span className="pq-chip" style={{ background: "var(--ink)", color: "var(--paper)" }}>
-                <TopicDot topicId={activeTopic} size={6} />
-                {PQ_TOPICS.find((t) => t.id === activeTopic)?.short}
-                <span onClick={() => setActiveTopic("all")} style={{ cursor: "pointer", opacity: 0.7, marginLeft: 2 }}>×</span>
+            {activeSubjectId && (
+              <span
+                className="pq-chip"
+                style={{ background: "var(--ink)", color: "var(--paper)" }}
+              >
+                {activeSubjectName}
+                <span
+                  onClick={() => handleSubjectChange(null)}
+                  style={{ cursor: "pointer", opacity: 0.7, marginLeft: 4 }}
+                >
+                  ×
+                </span>
               </span>
             )}
             {activeYear && (
-              <span className="pq-chip year" style={{ background: "var(--ink)", color: "var(--paper)" }}>
+              <span
+                className="pq-chip year"
+                style={{ background: "var(--ink)", color: "var(--paper)" }}
+              >
                 {activeYear}{" "}
-                <span onClick={() => setActiveYear(null)} style={{ cursor: "pointer", marginLeft: 2 }}>×</span>
+                <span
+                  onClick={() => setActiveYear(null)}
+                  style={{ cursor: "pointer", marginLeft: 2 }}
+                >
+                  ×
+                </span>
               </span>
             )}
-            {activeTopic === "all" && !activeYear && (
-              <span style={{ fontSize: 11.5, color: "var(--muted-2)", fontStyle: "italic" }}>nothing — showing everything</span>
+            {!activeSubjectId && !activeYear && (
+              <span style={{ fontSize: 11.5, color: "var(--muted-2)", fontStyle: "italic" }}>
+                nothing — showing everything
+              </span>
             )}
           </div>
         </div>
 
         {/* Question list or open question */}
-        <div className="scroll-y" style={{ flex: 1, padding: "20px 32px 32px", background: "var(--bg)" }}>
-          {openQ ? (
+        <div
+          className="scroll-y"
+          style={{ flex: 1, padding: "20px 32px 32px", background: "var(--bg)" }}
+        >
+          {openQuestion ? (
             <div style={{ maxWidth: 760 }}>
               <button
-                onClick={() => setOpenQ(null)}
+                onClick={() => setOpenQId(null)}
                 className="pq-btn ghost"
                 style={{ height: 32, padding: "0 8px", color: "var(--muted)", marginBottom: 16 }}
               >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  style={{ marginRight: 4 }}
+                >
                   <path d="M8 2L4 6l4 4" />
                 </svg>
                 Back to list
               </button>
-              <QuestionCard question={PQ_QUESTIONS.find((q) => q.id === openQ)!} />
+              <DbQuestionCard question={openQuestion as any} />
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 760 }}>
-              {filtered.slice(0, 8).map((q) => (
-                <QuestionRow key={q.id} question={q} onOpen={() => setOpenQ(q.id)} />
-              ))}
-              {filtered.length > 8 && (
-                <div style={{ textAlign: "center", padding: "20px 0 8px" }}>
-                  <button className="pq-btn">Load more →</button>
-                </div>
+              {filtered.length === 0 ? (
+                <p style={{ fontSize: 14, color: "var(--muted)", padding: "48px 0", textAlign: "center" }}>
+                  No questions match these filters.
+                </p>
+              ) : (
+                <>
+                  {filtered.slice(0, visibleCount).map((q) => (
+                    <LibraryQuestionRow
+                      key={q.id}
+                      question={q}
+                      onOpen={() => setOpenQId(q.id)}
+                    />
+                  ))}
+                  {visibleCount < filtered.length && (
+                    <div style={{ textAlign: "center", padding: "20px 0 8px" }}>
+                      <button
+                        className="pq-btn"
+                        onClick={() => setVisibleCount((n) => n + 50)}
+                      >
+                        Load more ({filtered.length - visibleCount} remaining) →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

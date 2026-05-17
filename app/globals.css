@@ -147,3 +147,31 @@ html, body {
 .serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; }
 .mono { font-family: var(--font-mono); }
 .num { font-variant-numeric: tabular-nums; }
+
+/* Hover cards */
+.paper-card { transition: border-color .15s; }
+.paper-card:hover { border-color: var(--muted-2); }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  /* exams grid → single column */
+  /* (inline grid style overridden via JS is handled in the component;
+     add this as a fallback for the grid wrapper via a class if needed) */
+
+  /* reduce side padding */
+  .page-content {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  /* practice filter bar: wrap + smaller */
+  .filter-bar {
+    padding: 10px 16px;
+    gap: 8px;
+  }
+
+  /* hide kbd hint */
+  .kbd-hint {
+    display: none;
+  }
+}

@@ -1,16 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { TopNav, type Tab } from "@/components/TopNav";
+import { TopNav } from "@/components/TopNav";
 import { LibraryView } from "@/components/LibraryView";
-import { UploadView } from "@/components/UploadView";
-import { ExamPaperView } from "@/components/ExamPaperView";
-import { PracticeView } from "@/components/PracticeView";
-import type { DbExam } from "@/lib/types";
+import type { LibraryQuestion } from "@/components/LibraryView";
 
-export function PrepyqApp({ exams }: { exams: DbExam[] }) {
-  const [activeTab, setActiveTab] = useState<Tab>("library");
-
+export function PrepyqApp({ questions }: { questions: LibraryQuestion[] }) {
   return (
     <div
       style={{
@@ -25,12 +19,8 @@ export function PrepyqApp({ exams }: { exams: DbExam[] }) {
         fontFeatureSettings: '"ss01", "cv11"',
       } as React.CSSProperties}
     >
-      <TopNav active={activeTab} onTabChange={setActiveTab} />
-
-      {activeTab === "library"  && <LibraryView exams={exams} />}
-      {activeTab === "upload"   && <UploadView />}
-      {activeTab === "papers"   && <ExamPaperView />}
-      {activeTab === "practice" && <PracticeView />}
+      <TopNav />
+      <LibraryView questions={questions} />
     </div>
   );
 }
